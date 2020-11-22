@@ -20,7 +20,7 @@ class Sensor:
 
 
 Sensor1 = Sensor(Kordinat(1, 425), Kordinat(1080, 430), 500, 1080)
-video=cv2.VideoCapture("E:\\LUAN VAN\\repo\\VIDEO\\CarsDrivingUnderBridge.mp4")
+video=cv2.VideoCapture("E:\\LUAN VAN\\repo\\VIDEO\\car.mp4")
 fgbg=cv2.createBackgroundSubtractorMOG2()
 #fgbg=cv2.createBackgroundSubtractorMOG2()
 kernel=np.ones((5,5),np.uint8)
