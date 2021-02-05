@@ -1,50 +1,16 @@
 import numpy as np
 import cv2
 from collections import OrderedDict
-
-class BackGroundSubtractor:
-    
-    def __init__(self,alpha,firstFrame):
-        self.alpha  = alpha
-        self.backGroundFrame = firstFrame
-
-    def getForeground(self,frame):
-        
-        # background = curentFrame * alpha + preBackground * (1 - alpha)
-        self.backGroundFrame =  frame * self.alpha + self.backGroundFrame * (1 - self.alpha)
-        # get Mask
-        # case float -> unit8
-        cv2.imshow('self.backGroundFrame.astype(np.uint8)', self.backGroundFrame.astype(np.uint8))
-        return cv2.absdiff(self.backGroundFrame.astype(np.uint8),frame)
-
-class Certain:  
-    def __init__(self, x, y, distance = -1):  
-        self.x = x  
-        self.y = y 
-        self.distance = distance 
-          
-    def CaculateDistance(self): 
-        return abs(self.y - Y)
-    
+   
 minDistaneThreshold = 65
 maxDistanceFromLine = 200
 buffer = 50
-def IsSameCentain(cen1, cen2):
-    _distance = ((((cen2.x - cen1.x )**2) + ((cen2.y-cen1.y)**2) )**0.5)
-    print ("check same ", " cen1:" ,cen1.x, cen1.y," cen2:" ,cen2.x, cen2.y,"distance",_distance)
-    if _distance > minDistaneThreshold:
-        return False
-    return True
-cam = cv2.VideoCapture("E:\\LUAN VAN\\repo\\VIDEO\\car.mp4")
-# cam = cv2.VideoCapture(0)
 
 # constant
 KERNEL_WIDTH = 5
 KERNEL_HEIGHT = 5
 SIGMA_X = 4
 SIGMA_Y = 4
-
-alpha = 0.015
 kernel = np.ones((3,7),np.uint8)
 c_white = (255,255,255)
 c_green = (0,255,0)
@@ -53,15 +19,34 @@ c_pink = (255,255,255)
 c_cyan = (255, 255, 0)
 threshold = 29
 minSizeHull = 1000
-chieu = -1
+
 listCertainLog = []
+images = []
+numberOfImage = 5
+T = 5
+class Certain:  
+    def __init__(self, x, y, distance = -1):  
+        self.x = x  
+        self.y = y 
+        self.distance = distance 
+          
+    def CaculateDistance(self): 
+        return abs(self.y - Y)
+ 
+#region Function Declare
+def IsSameCentain(cen1, cen2):
+    _distance = ((((cen2.x - cen1.x )**2) + ((cen2.y-cen1.y)**2) )**0.5)
+    print ("check same ", " cen1:" ,cen1.x, cen1.y," cen2:" ,cen2.x, cen2.y,"distance",_distance)
+    if _distance > minDistaneThreshold:
+        return False
+    return True
+
 # gaussian cho frame x
 def denoise(frame):
     # frame = cv2.medianBlur(frame,5)
     frame = cv2.GaussianBlur(frame,(5,5),0)
     # frame = cv2.medianBlur(frame, 5)
     return frame
-
 def CheckExitLineCrossing(y):
     AbsDistance = abs(y - Y)
     if (y < Y and Y - y < (maxDistanceFromLine + buffer)):
@@ -80,14 +65,39 @@ def RemoveCertainInLog(item):
     listCertainLog.remove(item)
 def UpdateCertainInLog(item, cx,cy):
     listCertainLog[listCertainLog.index(item)] = Certain(cx,cy,abs(cy-Y))
+
+
+#endregion
+
+# cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture("E:\\LUAN VAN\\repo\\VIDEO\\car.mp4")
+ret,mean = cam.read()
+mean =cv2.cvtColor(mean,cv2.COLOR_BGR2GRAY)
+(w,h) = mean.shape[:2]
+
+mean = np.copy(mean)
+
+# initialize the variances to a high number
+var = np.full_like(mean, 150)
+
+def nothing(x):
+    pass
+
+cv2.namedWindow('Configuration')
+cv2.createTrackbar('threshold','Configuration',30,100,nothing)
+
+
+
 ret,frame_init = cam.read()
 height, width, channels = frame_init.shape 
 Y = int(height*4/5)
 ExistCounter = 0
+
+
 if ret is True:
     frame_init = cv2.cvtColor(frame_init, cv2.COLOR_BGR2GRAY)
-    # init backgrouind subtraction
-    backSubtractor = BackGroundSubtractor(alpha,denoise(frame_init))
+    # assign first frame to background
+    backSubtractor = denoise(frame_init)
     run = True
 else:
     run = False
@@ -95,18 +105,31 @@ else:
 while(run):
     ret,frame_origin= cam.read()
     if ret is True:
-        frame_origin_gray = cv2.cvtColor(frame_origin, cv2.COLOR_BGR2GRAY)
+        frame_origin_gray = cv2.cvtColor(denoise(frame_origin), cv2.COLOR_BGR2GRAY)
         frame_process = frame_origin_gray.copy()
         # draw linecheck and line threshold
         cv2.line(frame_origin, (0, Y), (width,Y), c_yellow,3)
         cv2.line(frame_origin, (0, Y - maxDistanceFromLine),(width, Y - maxDistanceFromLine), c_cyan, 1)
-        # get the foreground
-        foreGround = backSubtractor.getForeground(denoise(frame_origin_gray))
-        # View image and  
+        learning_rate = 0.05
+        # calculate a new mean and variance based on previous
+
+        new_mean = (1-learning_rate) * mean + learning_rate * frame_process       
+        new_mean = new_mean.astype(np.uint8)
+
+        new_var  = (1-learning_rate) * var + learning_rate * cv2.subtract(frame_process, mean)**2
+
+        value = cv2.absdiff(frame_process, mean)
+        value = value / np.sqrt(var)
+
+
+        # mean = np.where(value < T, new_mean, new_mean)
+        # var =  np.where(value < T, new_var, new_var)
+
+        foreGround = np.where(value < T,  np.uint8([0]), np.uint8([255]))
+
+        # View background and  
         cv2.imshow('foreGround Before Threshold Process',foreGround)
-        
-        thresh1 = cv2.threshold(foreGround, threshold, 255, cv2.THRESH_BINARY)[1]
-         
+        thresh1 = foreGround
         thresh1 = cv2.erode(thresh1, None, iterations=2)        
         thresh1 = cv2.dilate(thresh1, None, iterations=7)
 
@@ -115,14 +138,14 @@ while(run):
         frameContours = np.zeros((thresh1.shape[0], thresh1.shape[1], 3), dtype=np.uint8)
         contours, _ = cv2.findContours(thresh1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        listNewContours = []		
+        listNewContours = []
         for t in contours:
             if cv2.contourArea(t, True) < 0:
                 listNewContours.append(t)
         contours = listNewContours
         frameContours = cv2.drawContours(frameContours, contours, -1, c_green, 2, 5)
         drawing = np.zeros((thresh1.shape[0], thresh1.shape[1], 3), dtype=np.uint8)
-        cv2.imshow('frameContours',frameContours)
+        # cv2.imshow('frameContours',frameContours)
         hull_list = []
         for i in range(len(contours)):
             hull = cv2.convexHull(contours[i])
@@ -130,7 +153,7 @@ while(run):
             if size > minSizeHull:
                 hull_list.append(hull)
         frameHull = cv2.drawContours(frame_process.copy(), hull_list, -1, c_green ,1)
-        #cv2.imshow('frameHull',frameHull)
+        cv2.imshow('frameHull',frameHull)
         frame_output = frame_origin.copy()
         for c in hull_list:
             m=cv2.moments(c)
@@ -169,7 +192,7 @@ while(run):
         for i in listCertainLog:
             ObjectCentroid = (i.x,i.y)
             cv2.circle(frame_output, ObjectCentroid, 1, (255, 0, 255), 5)
-        cv2.imshow("frame_output", frame_output)		
+        cv2.imshow("frame_output", frame_output)        
         cv2.imshow('frame input',(frame_origin))
         key = cv2.waitKey(1) & 0xFF
     else:

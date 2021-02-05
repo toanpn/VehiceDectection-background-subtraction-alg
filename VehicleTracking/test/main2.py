@@ -16,6 +16,12 @@ KERNEL_HEIGHT = 9
 SIGMA_X = 4
 SIGMA_Y = 4
 
+def CheckExitLineCrossing(y, CoorYEntranceLine):
+	AbsDistance = abs(y - CoorYEntranceLine)
+	if AbsDistance < 40 & y < CoorYEntranceLine:
+		return 1
+	return 0
+ExitCounter = 0
 while(cap.isOpened()):
     ret, thisFrame = cap.read() 
 
@@ -40,6 +46,24 @@ while(cap.isOpened()):
             hull = cv2.convexHull(contours[i])
             hull_list.append(hull)
         frameHull = cv2.drawContours(drawing, hull_list, -1, (0,255,0), -1)
+        frame_final = thisFrame.copy()
+        for c in hull_list:
+            m=cv2.moments(c)
+            if m['m00'] == 0: continue
+            cx=int(m['m10']/m['m00'])
+            cy=int(m['m01']/m['m00'])            
+            (x, y, w, h) = cv2.boundingRect(c)
+            cv2.rectangle(frame_final, (x, y), (x + w, y + h), (0, 255, 0), 1)
+            CoordXCentroid = int((x+x+w)/2)
+            CoordYCentroid = int((y+y+h)/2)
+            ObjectCentroid = (CoordXCentroid,CoordYCentroid)
+            cv2.circle(frame_final, ObjectCentroid, 1, (255, 0, 0), 5)
+            if CheckExitLineCrossing(y,int(height*4/5)):  
+                ExitCounter += 1
+        cv2.putText(frame_final, "CONTER: {}".format(str(ExitCounter)), (10, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 250, 1), 2)
+        
+        cv2.imshow("frame_final", frame_final)
         cv2.imshow('frame',thisFrame)
         cv2.imshow('temp_gauss',temp_gauss)
         cv2.imshow('frameContours',frameContours)
